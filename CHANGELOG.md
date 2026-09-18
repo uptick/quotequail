@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* Prefer an explicit reply/forward marker over a quoted block found above it,
+  so that a quotation pasted into the author's own text no longer hides the
+  actual reply boundary.
 * Recognize "Origineel bericht" as an additional Dutch translation of
   "Original Message" in forward markers.
 

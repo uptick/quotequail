@@ -57,6 +57,26 @@ def test_unwrap_html_image_at_start_of_quoted_body():
     }
 
 
+def test_unwrap_html_reply_below_inline_quote():
+    html = (
+        "<div><p>Quoting from the notes:</p>"
+        "<blockquote><p>Pasted text</p></blockquote>"
+        "<p>Sounds good to me.</p>"
+        '<div class="gmail_quote">On Mon, 1 Sep 2025 at 10:00, Someone '
+        "&lt;someone@example.com&gt; wrote:<br>"
+        '<blockquote class="gmail_quote"><p>Original message</p>'
+        "</blockquote></div></div>"
+    )
+
+    assert unwrap_html(html) == {
+        "type": "reply",
+        "date": "Mon, 1 Sep 2025 at 10:00",
+        "from": "Someone <someone@example.com>",
+        "html_top": "<div><p>Quoting from the notes:</p><blockquote><p>Pasted text</p></blockquote><p>Sounds good to me.</p></div>",
+        "html": '<div><div class="gmail_quote"><div><p>Original message</p></div></div></div>',
+    }
+
+
 @pytest.mark.parametrize(
     ("file", "expected"),
     [

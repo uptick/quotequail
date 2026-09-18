@@ -15,6 +15,16 @@ documentation see the corresponding constants in _patterns.py.
 """
 
 
+UnwrapResult = tuple[
+    str,
+    tuple[int | None, int | None],
+    dict[str, str] | None,
+    tuple[int | None, int | None] | None,
+    tuple[int | None, int | None] | None,
+    bool,
+]
+
+
 def find_pattern_on_line(
     lines: list[str],
     n: int,
@@ -264,22 +274,85 @@ def unindent_lines(lines: list[str]) -> list[str]:
     return unquoted
 
 
+def offset_range(
+    line_range: tuple[int | None, int | None] | None, offset: int
+) -> tuple[int | None, int | None] | None:
+    if line_range is None:
+        return None
+
+    start, end = line_range
+    return (
+        None if start is None else start + offset,
+        None if end is None else end + offset,
+    )
+
+
+def unwrap_below_quote(
+    lines: list[str],
+    rest_start: int,
+    max_wrap_lines: int,
+    min_header_lines: int,
+    min_quoted_lines: int,
+) -> UnwrapResult | None:
+    """
+    Unwrap the lines below a quoted block ending on line rest_start. If a
+    forward/reply or a header block is found below it, the quoted block is part
+    of the text written above it: the lines below are unwrapped and returned,
+    with their ranges adjusted to the given lines and the top range extended
+    over the quoted block. Quoted blocks in between are skipped.
+
+    Returns None if only quoted text was found below.
+    """
+    offset = rest_start
+
+    while offset < len(lines):
+        result = find_unwrap_start(
+            lines[offset:], max_wrap_lines, min_header_lines, min_quoted_lines
+        )
+        if not result:
+            return None
+
+        found_start, _, found_typ = result
+
+        if found_typ == "quoted":
+            quoted_start = offset + found_start
+            unquoted = unindent_lines(lines[quoted_start:])
+            quoted_result = find_unwrap_start(
+                unquoted, max_wrap_lines, min_header_lines, min_quoted_lines
+            )
+            if not quoted_result or quoted_result[2] != "headers":
+                offset = quoted_start + len(unquoted)
+                continue
+
+        below = unwrap(
+            lines[offset:], max_wrap_lines, min_header_lines, min_quoted_lines
+        )
+        if not below:
+            return None
+
+        typ, top_range, headers, main_range, bottom_range, needs_unindent = (
+            below
+        )
+        top_end = top_range[1]
+
+        return (
+            typ,
+            (0, None if top_end is None else offset + top_end),
+            headers,
+            offset_range(main_range, offset),
+            offset_range(bottom_range, offset),
+            needs_unindent,
+        )
+
+    return None
+
+
 def unwrap(
     lines: list[str],
     max_wrap_lines: int,
     min_header_lines: int,
     min_quoted_lines: int,
-) -> (
-    tuple[
-        str,
-        tuple[int | None, int | None],
-        dict[str, str] | None,
-        tuple[int | None, int | None] | None,
-        tuple[int | None, int | None] | None,
-        bool,
-    ]
-    | None
-):
+) -> UnwrapResult | None:
     """
     Return a tuple of:
     - Type ('forward', 'reply', 'headers', 'quoted')
@@ -410,6 +483,16 @@ def unwrap(
                 (rest_start, None),
                 True,
             )
+
+        below_result = unwrap_below_quote(
+            lines,
+            rest_start,
+            max_wrap_lines,
+            min_header_lines,
+            min_quoted_lines,
+        )
+        if below_result:
+            return below_result
 
         main_type = "quote"
         return (
